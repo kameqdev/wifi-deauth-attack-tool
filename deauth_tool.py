@@ -4,6 +4,7 @@ from textual.containers import Horizontal, VerticalScroll
 import threading
 
 from sniffer import NetworkScanner
+from attack import perform_deauth
 
 
 def run_in_ui_thread(func):
@@ -14,6 +15,7 @@ def run_in_ui_thread(func):
 
 class DeauthToolApp(App):
     BINDINGS = [('q', 'quit', 'Quit'),
+                ('d', 'deauth', 'Deauth target'),
                 ('r', 'rescan', 'Rescan for networks')]
 
     def __init__(self, interface='mon0'):
@@ -58,6 +60,22 @@ class DeauthToolApp(App):
         self.scanner.stop()
         
     # --- Bindings ---
+    def action_deauth(self):
+        target = None
+        bssid = None
+        if self.ap_table.has_focus:
+            target = self.ap_table.get_row_at(self.ap_table.cursor_row)[0]
+        elif self.clients_table.has_focus:
+            target, bssid, *_ = self.clients_table.get_row_at(self.clients_table.cursor_row)
+        else:
+            self.notify("No target selected for deauth.", severity="error", timeout=2)
+            return
+
+        self.notify(f"Sending deauth to {target}{f' via {bssid}' if bssid else ''} on {self.interface}", timeout=2)
+        def callback():
+            self.call_from_thread(self.notify, f"Deauth attack on {target} completed.", timeout=2)
+        threading.Thread(target=perform_deauth, args=(self.interface, target, bssid), kwargs={'callback': callback}).start()
+
     def action_rescan(self):
         self.scanner.stop()
         self.ap_table.clear()
