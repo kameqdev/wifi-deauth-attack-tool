@@ -20,8 +20,12 @@ class NetworkScanner:
         self.sniffer.start()
 
     def stop(self):
-        if self.sniffer:
+        if not self.sniffer:
+            return
+        try:
             self.sniffer.stop()
+        except Exception as e:
+            print(f"Error stopping sniffer: {e}")
 
     def _handle_packet(self, packet):
         if not packet.haslayer(Dot11):
