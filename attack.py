@@ -1,6 +1,6 @@
 from scapy.all import RadioTap, Dot11, Dot11Deauth, sendp
 
-def perform_deauth(interface, target_mac, bssid=None, count=100, callback=None):
+def perform_deauth(interface, target_mac, bssid=None, count=100, interval=0.1, callback=None):
     ap_mac = bssid or target_mac
     client_mac = target_mac if bssid else 'ff:ff:ff:ff:ff:ff'
 

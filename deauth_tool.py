@@ -1,6 +1,7 @@
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, DataTable, Label
-from textual.containers import Horizontal, VerticalScroll
+from textual.widgets import Header, Footer, DataTable, Label, Input, Rule
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.validation import Integer, Number
 import threading
 
 from sniffer import NetworkScanner
@@ -14,6 +15,8 @@ def run_in_ui_thread(func):
 
 
 class DeauthToolApp(App):
+    CSS = """#config_container { height: 2; }"""
+    
     BINDINGS = [('q', 'quit', 'Quit'),
                 ('d', 'deauth', 'Deauth target'),
                 ('r', 'rescan', 'Rescan for networks')]
@@ -33,12 +36,14 @@ class DeauthToolApp(App):
 
         yield Header(show_clock=True, name=self.title, icon='🦊')
 
-        yield from self.data_tables()
+        yield from self.data_tables_section()
+        yield Rule()
+        yield from self.config_section()
 
         yield Footer()
-        
-    def data_tables(self) -> ComposeResult:
-        with Horizontal():
+
+    def data_tables_section(self) -> ComposeResult:
+        with Horizontal(id='tables_container'):
             with VerticalScroll(id='ap_list'):
                 yield Label('Access Points')
                 self.ap_table = DataTable(zebra_stripes=True, cursor_type='row')
@@ -52,7 +57,16 @@ class DeauthToolApp(App):
                 self.clients_table.add_column('AP_BSSID', key='AP_BSSID')
                 self.clients_table.add_column('AP_SSID', key='AP_SSID')
                 yield self.clients_table
-        
+                
+    def config_section(self) -> ComposeResult:
+        with Vertical(id="config_container"):
+            with Horizontal():
+                yield Label("Packet Count: ")
+                yield Input(value="100", id="count_input", validators=[Integer(minimum=1)], compact=True)
+            with Horizontal():
+                yield Label("Interval (s): ")
+                yield Input(value="0.1", id="interval_input", type='number', validators=[Number(minimum=0)], compact=True)
+
     def on_mount(self):
         self.scanner.start()
     
@@ -70,11 +84,19 @@ class DeauthToolApp(App):
         else:
             self.notify("No target selected for deauth.", severity="error", timeout=2)
             return
+        
+        count_input = self.query_one("#count_input")
+        interval_input = self.query_one("#interval_input")
+        if not count_input.is_valid or not interval_input.is_valid:
+            self.notify("Invalid count or interval.", severity="error", timeout=2)
+            return
+        count = int(count_input.value)
+        interval = float(interval_input.value)
 
         self.notify(f"Sending deauth to {target}{f' via {bssid}' if bssid else ''} on {self.interface}", timeout=2)
         def callback():
             self.call_from_thread(self.notify, f"Deauth attack on {target} completed.", timeout=2)
-        threading.Thread(target=perform_deauth, args=(self.interface, target, bssid), kwargs={'callback': callback}).start()
+        threading.Thread(target=perform_deauth, args=(self.interface, target, bssid, count, interval, callback)).start()
 
     def action_rescan(self):
         self.scanner.stop()
